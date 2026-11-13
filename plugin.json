@@ -1,0 +1,6 @@
+{
+  "name": "ubuntu-vmwin-gpuout-helper",
+  "version": "1.0.0",
+  "description": "GPU 掉卡救援（Ubuntu KVM + Windows 11 + NVIDIA CMP 170HX cmpunlocker）：診斷、fix-gpu 完整救援、GSP keepalive 自動修復與新機重設流程。",
+  "skills": "./skills"
+}
