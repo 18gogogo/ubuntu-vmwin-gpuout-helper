@@ -1,0 +1,7 @@
+[Unit]
+Description=cmpunlocker GSP keepalive (re-arm the passthrough card)
+After=multi-user.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/lib/cmpunlocker/gsp-keepalive.sh
