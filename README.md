@@ -137,14 +137,27 @@ sudo bash fix-gpu.sh <vm-domain> <BDF>
 
 ## 9. 作為 DSH skill 安裝
 
-本 repo 是一個 **DSH（DeepSeek Harness）bundle**，內含同名 skill：
+本 repo 內含 DSH（DeepSeek Harness）skill（[`skills/ubuntu-vmwin-gpuout-helper/SKILL.md`](skills/ubuntu-vmwin-gpuout-helper/SKILL.md)）。DSH 內建的 filesystem skill provider 會**自動掃描 `~/.dsh/skills/`**（＝ `$DSH_HOME/skills`，base 組態預設掛載、含檔案監控），所以安裝只需把 skill 資料夾複製過去：
 
 ```bash
 git clone https://github.com/18gogogo/ubuntu-vmwin-gpuout-helper.git
-# 在 DSH 的 Plugin Manager 中安裝該資料夾（或 dsh 對應指令）
+cd ubuntu-vmwin-gpuout-helper
+# Linux / macOS:
+mkdir -p ~/.dsh/skills
+cp -r skills/ubuntu-vmwin-gpuout-helper ~/.dsh/skills/
 ```
 
-安裝後，session 的 skill catalog 會出現 `ubuntu-vmwin-gpuout-helper`；當你說「掉卡了／GPU 掉了」，agent 會自動依 skill 裡的診斷→救援→驗證流程處理。
+```powershell
+# Windows (PowerShell):
+git clone https://github.com/18gogogo/ubuntu-vmwin-gpuout-helper.git
+cd ubuntu-vmwin-gpuout-helper
+New-Item -ItemType Directory -Force "$env:USERPROFILE\.dsh\skills" | Out-Null
+Copy-Item -Recurse -Force skills\ubuntu-vmwin-gpuout-helper "$env:USERPROFILE\.dsh\skills\"
+```
+
+安裝後**無需重啟 DSH**（provider 有檔案監控，目錄變動會自動重新發現）；session 的 skill catalog 會出現 `ubuntu-vmwin-gpuout-helper`。當你說「掉卡了／GPU 掉了」，agent 會自動依 skill 裡的診斷→救援→驗證流程處理。
+
+> 備註：把整包 repo 用 DSH Plugin Manager 以 bundle 形式安裝是可行的延伸（需在 `package.json` 加 `dsh.bundle.patch` 宣告），目前以 `~/.dsh/skills/` 複製為標準安裝方式——對「新機／洗機覆用」而言這一步最簡單、最可靠。
 
 ## License
 
