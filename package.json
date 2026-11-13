@@ -1,0 +1,32 @@
+{
+  "name": "ubuntu-vmwin-gpuout-helper",
+  "version": "1.0.0",
+  "description": "Ubuntu KVM + Windows 11 GPU 掉卡救援（NVIDIA CMP 170HX / cmpunlocker）：診斷、fix-gpu 救援、GSP keepalive 自動修復、guest 端設定與新機重設流程。A DSH skill bundle.",
+  "keywords": [
+    "deepseek-harness",
+    "dsh",
+    "dsh-plugin",
+    "skill",
+    "gpu",
+    "passthrough",
+    "kvm",
+    "libvirt",
+    "cmpunlocker",
+    "cmp-170hx",
+    "vfio"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/18gogogo/ubuntu-vmwin-gpuout-helper.git"
+  },
+  "files": [
+    "plugin.json",
+    "package.json",
+    "README.md",
+    "LICENSE",
+    "skills",
+    "docs",
+    "scripts"
+  ]
+}
