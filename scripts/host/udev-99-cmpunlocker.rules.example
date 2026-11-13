@@ -1,0 +1,7 @@
+# 99-cmpunlocker-passthrough.rules
+# Auto re-arm the cmpunlocker GSP unlock whenever a CMP 170HX binds to vfio-pci
+# (i.e. when it is passed through to a VM and the VM starts).
+# Device IDs: 0x20c2 = CMP 170HX 8GB (unlock -> 64GB), 0x2082 = CMP 170HX 10GB (unlock -> 40GB).
+# Install as: /etc/udev/rules.d/99-cmpunlocker-passthrough.rules   (then udevadm control --reload)
+ACTION=="bind", SUBSYSTEM=="pci", DRIVER=="vfio-pci", ATTR{vendor}=="0x10de", ATTR{device}=="0x20c2", RUN+="/usr/local/lib/cmpunlocker/gsp-restore %k"
+ACTION=="bind", SUBSYSTEM=="pci", DRIVER=="vfio-pci", ATTR{vendor}=="0x10de", ATTR{device}=="0x2082", RUN+="/usr/local/lib/cmpunlocker/gsp-restore %k"
