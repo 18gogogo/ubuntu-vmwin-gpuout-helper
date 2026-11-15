@@ -13,7 +13,7 @@ description: 處理「GPU 掉卡」：Ubuntu KVM 直通 NVIDIA CMP 170HX（cmpun
 1. **cmpunlocker 的解鎖存在 GSP boot-state 暫存器**，任何 GPU reset（SBR/D3/驅動 reset/VM 電源循環）都會讓 GSP 重開機、暫存器回到 factory 值 → 解鎖被丟。**「掉卡」＝「解鎖被丟＋驅動認不出卡」，不是卡壞了。**
 2. **`Booter 0x31` 是開機噪音**：host 每次開機所有 CMP 卡都會打一批（每卡數十次）`NVRM: ... executeBooterUcode_TU102: Booter failed ... 0x31`，伴隨一次 PCIe retrain 降 `speed=1`，之後 `LnkSta` 恢復 `5GT/s x16`。不要據此判定某卡快壞（本案例曾被誤導）。
 3. **VM 藍屏 `0x1A`/`0x139`/`0x7E`** ＝ GPU 驅動/顯存層在 CUDA 滿載時糟蹋記憶體、GPU 當住（硬體/韌體層不穩）。TDR/電源設定擋不住硬藍屏；能做的是讓救援快、軟掉卡自動恢復、必要時減負或換卡。
-4. **DSH（Electron）renderer 崩潰**是下游症狀：guest 的 DSH 加 `--disable-gpu`（WARP 軟渲染）後消失。
+4. **DSH（Electron）renderer 崩潰**是下游症狀：guest 的 DSH 加 `--disable-gpu`（WARP 軟渲染）後消失。**DSH 自動更新會重寫 asar、沖掉補丁**（實測 rc.1→rc.3 後崩潰回潮，含 host 端 `0xC0000005`）→ 每次 DSH desktop 更新後重打：`node scripts/guest/dsh-disable-gpu-rc3.mjs`（rc.3 專用錨點；舊腳本的通用回退只掃 asar 前 64 MiB，夠不到 rc.3 的 main.js）。驗證：renderer 進程參數含 `--disable-gpu`、gpu-process 參數為 `--use-angle=d3d11-warp-webgl`（WARP＝軟體）、`nvidia-smi` 無 DSH 進程。
 5. **紅線：guest 的 170HX 驅動是特別版本（案例 580.88），不要升級**成一般版驅動。
 
 ## 診斷流程（卡掉了 / 用戶說「掉卡」）
@@ -48,9 +48,24 @@ sudo bash <path-to>/scripts/host/fix-gpu.sh <domain> <BDF>
 - 讀 `read-bugchecks.ps1` 輸出；`0x1A`/`0x139`/`0x7E` → 告知用戶這是**滿載下顯存/驅動層不穩**，非配置錯誤
 - 依 README §7 給後備選項：減負 → 換另一張 CMP 卡試（判斷系統性/單卡）→ 非 CMP 卡直通 → ComfyUI 移去 host
 
+### D. host 硬掛死（用戶說「host 死機/又死機」，VM 被連累）
+**簽名**：host journal 戛然而止、死前無 kernel panic/Xid；最後幾行是 userland（dockerd CDI 錯誤循環 或 network-unreachable 風暴）；VM 死前還活著（DHCP 續約）且無藍屏 → **host 先死**。
+```bash
+# 取证（在 host 重新上電後）
+journalctl --list-boots | tail -6                                  # 開機次數與各段時長
+journalctl -b -1 --no-pager | tail -15                             # 死前最後活動
+journalctl -b -1 --no-pager | grep -iE 'xid|lockup|hung task|Call Trace' | tail
+dmesg | grep -iE 'xid|aer|panic|lockup' | grep -v -i Booter
+sudo ras-mc-ctl --errors 2>/dev/null ; ls /var/crash               # MCE / vmcore（需 crash-capture 已裝）
+```
+- 死前 tail 是 dockerd CDI `/dev/dri/cardX` 錯誤循環 → 先查**最近有沒有把 host 卡（0a/0b/43）錯綁 vfio**（自傷變體）
+- 死前 tail 是 network-unreachable、無 Xid → 靜默硬掛（host 卡/驅動層嫌疑）→ **確認 crash-capture 在位**：沒有就跑 `sudo bash scripts/host/install-crash-capture.sh`，等下次掛死留證據
+- 急救：**強制關機可靠**（host 的正常 reboot 也會掛）；上電後 VM 自啟、直通卡 rebind 自動還原 GSP
+- noise 對照：UBSAN `Call Trace`（如 `shmem_show_options`）＝非致命；libvirtd「unclean termination」自啟＝記錄即可
+
 ## 重設流程（新機 / 洗機後）
 
-照 README §5 的 checklist 走；順序：host cmpunlocker（nvidia-open 610+、Secure Boot off）→ udev 規則 → 確認 `cmpunlocker-passthrough.service` → 部署 keepalive（`install-keepalive.sh`）→ 部署 fix-gpu.sh（改 BDF 預設值）→ VM hostdev → guest 特別版驅動（**勿升級**）→ `gpu-settings.ps1` →（可選）`dsh-disable-gpu.mjs` → 滿載驗證 30 分鐘。
+照 README §5 的 checklist 走；順序：host cmpunlocker（nvidia-open 610+、Secure Boot off）→ udev 規則 → 確認 `cmpunlocker-passthrough.service` → 部署 keepalive（`install-keepalive.sh`）→ 部署 fix-gpu.sh（改 BDF 預設值）→ **crash-capture 強化（`install-crash-capture.sh`）** → VM hostdev → guest 特別版驅動（**勿升級**）→ `gpu-settings.ps1` →（可選）`dsh-disable-gpu.mjs` / `dsh-disable-gpu-rc3.mjs`（依 DSH 版本）→ 滿載驗證 30 分鐘。
 
 ## 換卡（例如 44→43）時要改什麼
 
@@ -67,3 +82,8 @@ sudo bash <path-to>/scripts/host/fix-gpu.sh <domain> <BDF>
 - Win11 24H2 的 `powercfg` 已無 PCI Express 子群組的 Link State PM 設定 → N/A，不是錯誤
 - guest 的 170HX 驅動（特別版）**不要升級**
 - **不要動 host 上跑 vLLM 的那張卡**（它支撐著你的 agent session 本身）
+- **DSH 自動更新會沖掉 asar 的 `--disable-gpu` 補丁** → 每次更新後重打（rc.3 用 `dsh-disable-gpu-rc3.mjs`），並用「進程參數三聯」驗證
+- `gsp-restore show` 的 `bsi … needs restore`（0x00100000）是**已解鎖卡的常態雜訊**（host 自己的卡同值、掉電都清不掉）——掉卡判準＝卡從 VM 裝置管理員消失
+- sed 經「PowerShell here-string → ssh → bash」改含引號的行（如 GRUB）會被啃掉引號，`\042` 在替換段＝`\0` 反向引用 → 用 **base64 python3** 或 scp 腳本上 host 執行
+- kdump 的 unit 名是 **`kdump-tools`**（不是 `kdump`）
+- host 的**正常 reboot 可能掛**（nvidia 驅動狀態）→ 強制關機可靠
